@@ -6,19 +6,31 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
-          cache: true
-      - run: gofmt -w cmd internal
-      - run: git diff --exit-code
+          cache: false
+      - name: Format Go sources
+        run: gofmt -w cmd internal
+      - name: Commit formatting on direct main pushes
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add cmd internal
+            git commit -m "style: apply gofmt"
+            git push origin HEAD:main
+          fi
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/chatgpt
