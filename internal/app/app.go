@@ -22,6 +22,7 @@ type App struct {
 	AI       *openai.Client
 	Compiler *compiler.Compiler
 	Exe      string
+	WorkDir  string
 }
 
 func New() (*App, error) {
@@ -34,7 +35,8 @@ func New() (*App, error) {
 		return nil, err
 	}
 	exe, _ := os.Executable()
-	return &App{Store: s, AI: ai, Compiler: compiler.New(ai), Exe: exe}, nil
+	workDir, _ := os.Getwd()
+	return &App{Store: s, AI: ai, Compiler: compiler.New(ai), Exe: exe, WorkDir: workDir}, nil
 }
 
 func (a *App) Start(ctx context.Context) error {
@@ -83,6 +85,7 @@ func (a *App) OpenRoom(ctx context.Context, id string) error {
 	if os.Getenv("TMUX") == "" && has("tmux") {
 		name := "splitagents-" + safe(r.ID)
 		cmd := exec.Command("tmux", "new-session", "-A", "-s", name, a.Exe, "pane", "run", "--room", id, "--pane", "1")
+		cmd.Dir = a.WorkDir
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -164,7 +167,7 @@ func (a *App) split(roomID string, n int) error {
 		} else {
 			args = append(args, "-v")
 		}
-		args = append(args, a.Exe, "pane", "run", "--room", roomID, "--pane", strconv.Itoa(p))
+		args = append(args, "-c", a.WorkDir, a.Exe, "pane", "run", "--room", roomID, "--pane", strconv.Itoa(p))
 		if err := exec.Command("tmux", args...).Run(); err != nil {
 			return err
 		}
@@ -211,11 +214,13 @@ func (a *App) openNewTerminal(id string) error {
 	if runtime.GOOS != "darwin" {
 		return a.OpenRoom(context.Background(), id)
 	}
-	script := fmt.Sprintf(`tell application "Terminal" to do script %q`, a.Exe+" room open "+id)
+	command := fmt.Sprintf("cd %s && %s room open %s", shellQuote(a.WorkDir), shellQuote(a.Exe), shellQuote(id))
+	script := fmt.Sprintf(`tell application "Terminal" to do script %q`, command)
 	return exec.Command("osascript", "-e", script).Run()
 }
 func has(name string) bool { _, err := exec.LookPath(name); return err == nil }
 func safe(s string) string { return strings.NewReplacer("_", "-", ".", "-").Replace(s) }
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 func humanAgo(t time.Time) string {
 	d := time.Since(t)
 	if d < time.Minute {
