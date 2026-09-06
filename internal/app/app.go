@@ -23,6 +23,7 @@ type App struct {
 	Compiler *compiler.Compiler
 	Exe      string
 	WorkDir  string
+	EnvFile  string
 }
 
 func New() (*App, error) {
@@ -36,7 +37,8 @@ func New() (*App, error) {
 	}
 	exe, _ := os.Executable()
 	workDir, _ := os.Getwd()
-	return &App{Store: s, AI: ai, Compiler: compiler.New(ai), Exe: exe, WorkDir: workDir}, nil
+	envFile := os.Getenv("SPLITAGENTS_ENV_FILE")
+	return &App{Store: s, AI: ai, Compiler: compiler.New(ai), Exe: exe, WorkDir: workDir, EnvFile: envFile}, nil
 }
 
 func (a *App) Start(ctx context.Context) error {
@@ -84,7 +86,8 @@ func (a *App) OpenRoom(ctx context.Context, id string) error {
 	}
 	if os.Getenv("TMUX") == "" && has("tmux") {
 		name := "splitagents-" + safe(r.ID)
-		cmd := exec.Command("tmux", "new-session", "-A", "-s", name, a.Exe, "pane", "run", "--room", id, "--pane", "1")
+		command := a.childCommand("pane", "run", "--room", id, "--pane", "1")
+		cmd := exec.Command("tmux", "new-session", "-A", "-s", name, command)
 		cmd.Dir = a.WorkDir
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -122,7 +125,7 @@ func (a *App) RunPane(ctx context.Context, roomID string, pane int) error {
 			continue
 		}
 		if q == "/status" {
-			fmt.Printf("room=%s pane=%d logs=%s\n", roomID, pane, a.Store.Root)
+			fmt.Printf("room=%s pane=%d logs=%s env=%s\n", roomID, pane, a.Store.Root, a.EnvFile)
 			continue
 		}
 		if strings.HasPrefix(q, "/pane ") {
@@ -167,7 +170,7 @@ func (a *App) split(roomID string, n int) error {
 		} else {
 			args = append(args, "-v")
 		}
-		args = append(args, "-c", a.WorkDir, a.Exe, "pane", "run", "--room", roomID, "--pane", strconv.Itoa(p))
+		args = append(args, "-c", a.WorkDir, a.childCommand("pane", "run", "--room", roomID, "--pane", strconv.Itoa(p)))
 		if err := exec.Command("tmux", args...).Run(); err != nil {
 			return err
 		}
@@ -214,9 +217,20 @@ func (a *App) openNewTerminal(id string) error {
 	if runtime.GOOS != "darwin" {
 		return a.OpenRoom(context.Background(), id)
 	}
-	command := fmt.Sprintf("cd %s && %s room open %s", shellQuote(a.WorkDir), shellQuote(a.Exe), shellQuote(id))
+	command := fmt.Sprintf("cd %s && %s", shellQuote(a.WorkDir), a.childCommand("room", "open", id))
 	script := fmt.Sprintf(`tell application "Terminal" to do script %q`, command)
 	return exec.Command("osascript", "-e", script).Run()
+}
+func (a *App) childCommand(args ...string) string {
+	parts := make([]string, 0, len(args)+2)
+	if a.EnvFile != "" {
+		parts = append(parts, "SPLITAGENTS_ENV_FILE="+shellQuote(a.EnvFile))
+	}
+	parts = append(parts, shellQuote(a.Exe))
+	for _, arg := range args {
+		parts = append(parts, shellQuote(arg))
+	}
+	return strings.Join(parts, " ")
 }
 func has(name string) bool { _, err := exec.LookPath(name); return err == nil }
 func safe(s string) string { return strings.NewReplacer("_", "-", ".", "-").Replace(s) }
