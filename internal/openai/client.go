@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jin-take/SplitAgents/internal/domain"
@@ -21,13 +22,26 @@ type Client struct {
 }
 
 func New() (*Client, error) {
-	if err := loadDotEnv(".env"); err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("load .env: %w", err)
+	envFile := strings.TrimSpace(os.Getenv("SPLITAGENTS_ENV_FILE"))
+	if envFile == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			candidate := filepath.Join(cwd, ".env")
+			if _, err := os.Stat(candidate); err == nil {
+				envFile = candidate
+				_ = os.Setenv("SPLITAGENTS_ENV_FILE", candidate)
+			}
+		}
+	}
+
+	if envFile != "" {
+		if err := loadDotEnv(envFile); err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("load .env: %w", err)
+		}
 	}
 
 	k := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if k == "" {
-		return nil, errors.New("OPENAI_API_KEY is not set; add OPENAI_API_KEY=\"...\" to .env or export it in your shell")
+		return nil, errors.New("OPENAI_API_KEY is not set; run chatgpt from the split-agents directory containing .env")
 	}
 	return &Client{APIKey: k, HTTP: &http.Client{}}, nil
 }
