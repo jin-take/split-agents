@@ -92,13 +92,17 @@ func loadDotEnv(path string) error {
 }
 
 func (c *Client) request(ctx context.Context, body any) (*http.Response, error) {
-	b, _ := json.Marshal(body)
+	b, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/responses", bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
 	return c.HTTP.Do(req)
 }
 
@@ -132,37 +136,70 @@ func (c *Client) Stream(ctx context.Context, model, reasoning, instructions, inp
 		raw, _ := io.ReadAll(resp.Body)
 		return "", domain.Usage{}, fmt.Errorf("openai: %s", strings.TrimSpace(string(raw)))
 	}
+
 	var out strings.Builder
 	var usage domain.Usage
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+
 	for sc.Scan() {
-		line := sc.Text()
-		if !strings.HasPrefix(line, "data: ") {
+		line := strings.TrimSpace(sc.Text())
+		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			break
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
 		}
+
 		var ev map[string]any
-		if json.Unmarshal([]byte(data), &ev) != nil {
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
 			continue
 		}
+
 		typ, _ := ev["type"].(string)
-		if typ == "response.output_text.delta" {
-			if d, ok := ev["delta"].(string); ok {
+		switch typ {
+		case "response.output_text.delta":
+			if d, ok := ev["delta"].(string); ok && d != "" {
 				out.WriteString(d)
-				onDelta(d)
+				if onDelta != nil {
+					onDelta(d)
+				}
 			}
-		}
-		if typ == "response.completed" {
+		case "response.completed":
+			r, _ := ev["response"].(map[string]any)
+			usage = extractUsage(r)
+
+			// Some transports or API versions may not expose text deltas in the
+			// exact shape above. The completed response still contains the final
+			// output, so use it as a safe fallback rather than returning an empty
+			// assistant message.
+			if out.Len() == 0 {
+				finalText := extractText(r)
+				if finalText != "" {
+					out.WriteString(finalText)
+					if onDelta != nil {
+						onDelta(finalText)
+					}
+				}
+			}
+		case "response.failed", "response.incomplete":
 			if r, ok := ev["response"].(map[string]any); ok {
-				usage = extractUsage(r)
+				return out.String(), extractUsage(r), fmt.Errorf("openai stream %s: %s", typ, responseError(r))
 			}
+			return out.String(), usage, fmt.Errorf("openai stream %s", typ)
+		case "error":
+			return out.String(), usage, fmt.Errorf("openai stream error: %s", eventError(ev))
 		}
 	}
-	return out.String(), usage, sc.Err()
+
+	if err := sc.Err(); err != nil {
+		return out.String(), usage, err
+	}
+	if strings.TrimSpace(out.String()) == "" {
+		return "", usage, errors.New("openai stream completed without text output")
+	}
+	return out.String(), usage, nil
 }
 
 func extractText(r map[string]any) string {
@@ -196,6 +233,32 @@ func extractUsage(r map[string]any) domain.Usage {
 		u.ReasoningTokens = num(d["reasoning_tokens"])
 	}
 	return u
+}
+
+func responseError(r map[string]any) string {
+	if e, ok := r["error"].(map[string]any); ok {
+		if msg, ok := e["message"].(string); ok && msg != "" {
+			return msg
+		}
+	}
+	if reason, ok := r["incomplete_details"].(map[string]any); ok {
+		if v, ok := reason["reason"].(string); ok && v != "" {
+			return v
+		}
+	}
+	return "unknown response error"
+}
+
+func eventError(ev map[string]any) string {
+	if msg, ok := ev["message"].(string); ok && msg != "" {
+		return msg
+	}
+	if e, ok := ev["error"].(map[string]any); ok {
+		if msg, ok := e["message"].(string); ok && msg != "" {
+			return msg
+		}
+	}
+	return "unknown stream error"
 }
 
 func num(v any) int {
