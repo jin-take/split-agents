@@ -83,21 +83,52 @@ Inside a Room:
 
 This calls tmux `split-window` and starts a separate `chatgpt pane run` process for each new Pane.
 
-### macOS `Command + Shift + 1/2/3`
+## Pane focus
 
-A CLI process cannot reliably capture macOS Command-key shortcuts because Terminal.app consumes them first. For v0.1, bind the desired Terminal/iTerm shortcut to send these strings to the active Pane:
+SplitAgents assigns a logical Pane number to each agent process. Move focus directly with:
 
 ```text
-/split 1\n
-/split 2\n
-/split 3\n
+/pane 1
+/pane 2
+/pane 3
 ```
 
-The runtime remains terminal-agnostic while preserving the requested shortcut UX through the terminal emulator's key mapping.
+The command resolves the tmux pane that was started with the matching `--pane N` argument, so it does not depend on the user's tmux pane-base-index setting.
+
+Standard tmux focus controls continue to work as well:
+
+```text
+Ctrl+b then Arrow Key
+Ctrl+b then q then pane number
+```
+
+### macOS `Command + 1/2/3`
+
+A CLI process cannot receive `Command` shortcuts that are consumed by the terminal emulator. Apple Terminal.app reserves `Command + number` for tab selection, so SplitAgents cannot override that shortcut from inside tmux.
+
+For an exact `Command + 1/2/3` workflow, configure the terminal or a macOS key-remapping tool to send the following text plus Enter to the active SplitAgents pane:
+
+```text
+Command+1 -> /pane 1
+Command+2 -> /pane 2
+Command+3 -> /pane 3
+```
+
+Terminal emulators that support arbitrary key mappings can send those strings directly. When using Apple Terminal.app, an external key remapper such as Karabiner-Elements or Hammerspoon is required for the exact `Command + number` mapping.
+
+### macOS `Command + Shift + 1/2/3`
+
+The same approach can be used for Pane creation:
+
+```text
+Command+Shift+1 -> /split 1
+Command+Shift+2 -> /split 2
+Command+Shift+3 -> /split 3
+```
 
 ## Environment
 
-The application automatically loads `.env` from the current working directory at startup.
+The application automatically loads `.env` from the current working directory at startup. The original `.env` path is propagated to newly opened Terminal windows and tmux panes with `SPLITAGENTS_ENV_FILE`.
 
 ```dotenv
 OPENAI_API_KEY="YOUR_KEY"
@@ -106,6 +137,7 @@ OPENAI_API_KEY="YOUR_KEY"
 | Variable | Required | Purpose |
 |---|---:|---|
 | `OPENAI_API_KEY` | yes | OpenAI Responses API authentication |
+| `SPLITAGENTS_ENV_FILE` | internal | Absolute path propagated to child Terminal/tmux processes |
 
 `.env` is ignored by Git and must never be committed.
 
@@ -122,4 +154,3 @@ The default routing policy is code-owned so it can be benchmarked and changed wi
 - Room and Pane files are created with user-only permissions where applicable.
 - JSONL logs are append-only.
 - Pane summaries are derived cache and can be deleted/rebuilt later.
-- The current implementation loads `.env` from the process working directory, so start `chatgpt` from the `split-agents` repository root when relying on the repository-local `.env`.
