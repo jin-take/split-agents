@@ -12,13 +12,13 @@ type Room struct {
 }
 
 type Message struct {
-	At       time.Time `json:"at"`
-	Role     string    `json:"role"`
-	Content  string    `json:"content"`
-	Model    string    `json:"model,omitempty"`
-	Input    int       `json:"input_tokens,omitempty"`
-	Output   int       `json:"output_tokens,omitempty"`
-	Reasoning int      `json:"reasoning_tokens,omitempty"`
+	At        time.Time `json:"at"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	Model     string    `json:"model,omitempty"`
+	Input     int       `json:"input_tokens,omitempty"`
+	Output    int       `json:"output_tokens,omitempty"`
+	Reasoning int       `json:"reasoning_tokens,omitempty"`
 }
 
 type Usage struct {
