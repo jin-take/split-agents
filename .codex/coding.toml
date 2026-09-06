@@ -1,0 +1,258 @@
+# 設定
+version = 1
+
+[objective]
+# とにかく安くするのではなく
+# costに対する成果を最大化する
+optimize_for = "quality_per_token"
+experimental_mode = true
+
+# 品質
+profile = "balanced"
+minimum_quality_score = 0.82
+target_quality_score = 0.92
+
+
+# =========================================================
+# Budget
+# =========================================================
+
+[budget]
+
+# まずここまでで解けるようにする
+soft_token_limit = 20000
+
+# 通常タスクの上限
+normal_token_limit = 50000
+
+# これを超えるなら、
+# 本当に高コスト処理が必要か再評価
+hard_token_limit = 100000
+
+# 1タスクで高級モデルを使える回数
+premium_call_limit = 2
+
+# サブエージェント総数
+max_agents = 4
+
+# 同時並列
+max_parallel_agents = 3
+
+
+# =========================================================
+# Initial routing
+# =========================================================
+
+[routing]
+
+# 最初は必ず安いモデルから
+default_profile = "cheapest"
+
+# ほとんどの実装
+implementation_profile = "fast"
+
+# 難しい実装
+complex_implementation_profile = "balanced"
+
+# 本当に難しい思考
+deep_profile = "deep"
+
+# 最終兵器
+premium_profile = "astra-deep"
+
+
+# =========================================================
+# Task classification
+# =========================================================
+
+[classification]
+
+# 0.0 - 1.0
+
+simple_max = 0.25
+normal_max = 0.55
+complex_max = 0.80
+
+# 0.80以上でdeep候補
+deep_min = 0.80
+
+# Astraを最初から使わない
+allow_direct_premium = false
+
+
+# =========================================================
+# Escalation
+# =========================================================
+
+[escalation]
+
+enabled = true
+
+# 自信が低い
+confidence_below = 0.70
+
+# 同じ失敗
+max_same_failure_count = 2
+
+# テスト失敗
+on_test_failure = true
+
+# 要件解釈が曖昧
+on_requirement_ambiguity = true
+
+# architecture判断
+on_architecture_decision = true
+
+# security関連
+on_security_sensitive = true
+
+# migration関連
+on_database_migration = true
+
+# 外部API仕様が不明
+on_external_api_uncertainty = true
+
+
+# =========================================================
+# Escalation ladder
+# =========================================================
+
+[[escalation.levels]]
+level = 0
+profile = "cheapest"
+max_tokens = 8000
+
+[[escalation.levels]]
+level = 1
+profile = "fast"
+max_tokens = 20000
+
+[[escalation.levels]]
+level = 2
+profile = "balanced"
+max_tokens = 40000
+
+[[escalation.levels]]
+level = 3
+profile = "deep"
+max_tokens = 70000
+
+[[escalation.levels]]
+level = 4
+profile = "astra-deep"
+max_tokens = 100000
+
+
+# =========================================================
+# Subagents
+# =========================================================
+
+[subagents]
+
+enabled = true
+
+# 1タスク = いきなり複数エージェント、は禁止
+spawn_only_when_parallelizable = true
+
+# サブタスクが最低この数ないならspawnしない
+minimum_independent_tasks = 2
+
+# 子Agentの基本
+default_profile = "cheapest"
+
+# 調査
+research_profile = "cheapest"
+
+# grep / ファイル探索
+code_search_profile = "cheapest"
+
+# テスト
+test_profile = "fast"
+
+# 通常実装
+implementation_profile = "fast"
+
+# レビュー
+review_profile = "balanced"
+
+# architectureレビューだけ強め
+architecture_review_profile = "deep"
+
+
+# =========================================================
+# Retry
+# =========================================================
+
+[retry]
+
+# 何も考えず同じプロンプトを投げ直すのは禁止
+blind_retry = false
+
+max_attempts = 3
+
+# 再試行ごとに必ず
+# failure reasonを抽出してプロンプトを変える
+require_failure_analysis = true
+
+# 失敗するたびにいきなりpremiumへ上げない
+escalate_after_failures = 2
+
+
+# =========================================================
+# Context
+# =========================================================
+
+[context]
+
+# 全repoを毎回入れない
+load_entire_repository = false
+
+# まず検索して必要部分だけ
+search_before_context_expansion = true
+
+# 同じファイルを何度も読み直さない
+reuse_loaded_context = true
+
+# 過去の大きな出力を再投入しない
+summarize_completed_steps = true
+
+# 長くなったら圧縮
+compact_when_token_ratio = 0.65
+
+
+# =========================================================
+# Review
+# =========================================================
+
+[review]
+
+enabled = true
+
+# 全実装に高性能レビューを入れない
+always_use_premium = false
+
+# 軽微修正ならレビュー省略可能
+skip_for_trivial_changes = true
+
+# 以下のみ強いレビュー
+premium_for_security = true
+premium_for_architecture = true
+premium_for_money_movement = true
+premium_for_auth = true
+
+
+# =========================================================
+# Stop conditions
+# =========================================================
+
+[stop]
+
+# 品質十分ならそれ以上考えない
+stop_when_quality_reached = true
+
+# テスト成功 + confidence高なら終了
+stop_on_tests_passed = true
+minimum_confidence = 0.85
+
+# 「念のためもう一回考える」を防ぐ
+prevent_unnecessary_reflection = true

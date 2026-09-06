@@ -1,0 +1,101 @@
+# =========================================================
+# Default
+# 普段使いは「そこそこ賢い・使いすぎない」
+# =========================================================
+
+profile = "balanced"
+
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+model_verbosity = "low"
+
+# ゴール単位で使わせすぎないための上限
+# ※ 実際の最適値は利用状況を見て調整
+max_goal_token_budget = 60000
+
+
+# =========================================================
+# Subagents
+# サブエージェントは親より安くするのが基本
+# =========================================================
+
+default_subagent_model = "gpt-5.6-luna"
+default_subagent_reasoning_effort = "low"
+
+# 並列化しすぎると一瞬でコストが膨らむため控えめ
+agents_max_threads = 4
+
+
+# =========================================================
+# Profiles
+# =========================================================
+
+# ---------------------------------------------------------
+# cheapest
+# grep / 調査 / 軽微な修正 / 定型処理
+# ---------------------------------------------------------
+[profiles.cheapest]
+model = "gpt-5.6-luna"
+model_reasoning_effort = "low"
+model_verbosity = "low"
+
+
+# ---------------------------------------------------------
+# fast
+# 普通のコーディング
+# Lunaより精度が欲しいが、重い推論はいらない
+# ---------------------------------------------------------
+[profiles.fast]
+model = "gpt-5.6-sol"
+model_reasoning_effort = "low"
+model_verbosity = "low"
+
+
+# ---------------------------------------------------------
+# balanced
+# 普段使い
+# ---------------------------------------------------------
+[profiles.balanced]
+model = "gpt-5.6-sol"
+model_reasoning_effort = "medium"
+model_verbosity = "low"
+
+
+# ---------------------------------------------------------
+# deep
+# 設計 / 難しいデバッグ / 複数ファイル変更
+# ---------------------------------------------------------
+[profiles.deep]
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+model_verbosity = "medium"
+
+
+# ---------------------------------------------------------
+# critical
+# セキュリティ / DB migration / architecture / 難解障害
+# ---------------------------------------------------------
+[profiles.critical]
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+model_verbosity = "medium"
+
+
+# ---------------------------------------------------------
+# astra-fast
+# Astraを使いたいが、まずは低推論で試す
+# ---------------------------------------------------------
+[profiles.astra-fast]
+model = "gpt-6-astra"
+model_reasoning_effort = "low"
+model_verbosity = "low"
+
+
+# ---------------------------------------------------------
+# astra-deep
+# Astraの能力が本当に必要なところだけ
+# ---------------------------------------------------------
+[profiles.astra-deep]
+model = "gpt-6-astra"
+model_reasoning_effort = "high"
+model_verbosity = "medium"
