@@ -11,7 +11,19 @@
 
 ```bash
 brew install go tmux
-export OPENAI_API_KEY="YOUR_KEY"
+```
+
+Create a `.env` file in the repository root:
+
+```bash
+cat > .env <<'EOF'
+OPENAI_API_KEY="YOUR_KEY"
+EOF
+```
+
+Then install:
+
+```bash
 make install
 ```
 
@@ -21,13 +33,18 @@ Ensure `$(go env GOPATH)/bin` is on your PATH:
 export PATH="$(go env GOPATH)/bin:$PATH"
 ```
 
-Then run:
+Run SplitAgents from the repository root so the local `.env` is loaded:
 
 ```bash
+cd /path/to/split-agents
 chatgpt run start
 ```
 
+If `OPENAI_API_KEY` is already exported in the shell, the existing process environment takes precedence over the value in `.env`.
+
 ## Development
+
+From the repository root:
 
 ```bash
 go run ./cmd/chatgpt run start
@@ -80,9 +97,17 @@ The runtime remains terminal-agnostic while preserving the requested shortcut UX
 
 ## Environment
 
+The application automatically loads `.env` from the current working directory at startup.
+
+```dotenv
+OPENAI_API_KEY="YOUR_KEY"
+```
+
 | Variable | Required | Purpose |
 |---|---:|---|
 | `OPENAI_API_KEY` | yes | OpenAI Responses API authentication |
+
+`.env` is ignored by Git and must never be committed.
 
 ## OpenAI request behavior
 
@@ -93,7 +118,8 @@ The default routing policy is code-owned so it can be benchmarked and changed wi
 ## Operational notes
 
 - The API key is never written to Room logs.
+- Existing shell environment variables override `.env` values.
 - Room and Pane files are created with user-only permissions where applicable.
 - JSONL logs are append-only.
 - Pane summaries are derived cache and can be deleted/rebuilt later.
-- The current implementation requires an API key even to open the launcher because the client is initialized at startup; moving initialization to first API use is a small future hardening item.
+- The current implementation loads `.env` from the process working directory, so start `chatgpt` from the `split-agents` repository root when relying on the repository-local `.env`.
