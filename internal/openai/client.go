@@ -21,11 +21,60 @@ type Client struct {
 }
 
 func New() (*Client, error) {
-	k := os.Getenv("OPENAI_API_KEY")
+	if err := loadDotEnv(".env"); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("load .env: %w", err)
+	}
+
+	k := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if k == "" {
-		return nil, errors.New("OPENAI_API_KEY is not set")
+		return nil, errors.New("OPENAI_API_KEY is not set; add OPENAI_API_KEY=\"...\" to .env or export it in your shell")
 	}
 	return &Client{APIKey: k, HTTP: &http.Client{}}, nil
+}
+
+// loadDotEnv loads KEY=VALUE pairs from path without adding an external
+// dependency. Existing process environment variables always take precedence.
+func loadDotEnv(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" {
+			continue
+		}
+
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+
+	return scanner.Err()
 }
 
 func (c *Client) request(ctx context.Context, body any) (*http.Response, error) {
@@ -120,6 +169,7 @@ func extractText(r map[string]any) string {
 	}
 	return b.String()
 }
+
 func extractUsage(r map[string]any) domain.Usage {
 	var u domain.Usage
 	m, _ := r["usage"].(map[string]any)
@@ -133,6 +183,7 @@ func extractUsage(r map[string]any) domain.Usage {
 	}
 	return u
 }
+
 func num(v any) int {
 	if f, ok := v.(float64); ok {
 		return int(f)
