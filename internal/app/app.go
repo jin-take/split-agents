@@ -103,7 +103,7 @@ func (a *App) RunPane(ctx context.Context, roomID string, pane int) error {
 		return err
 	}
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("\n%s\nRoom: %s | Pane: %d/%d\nCommands: /split 1|2|3, /pane N, /status, /quit\n\n", r.Title, r.ID, pane, r.PaneCount)
+	fmt.Printf("\n%s\nRoom: %s | Pane: %d/%d\nCommands: /split 1|2|3, /pane 1|2|3, /status, /quit\n\n", r.Title, r.ID, pane, r.PaneCount)
 	for {
 		fmt.Printf("P%d > ", pane)
 		line, err := reader.ReadString('\n')
@@ -129,7 +129,14 @@ func (a *App) RunPane(ctx context.Context, roomID string, pane int) error {
 			continue
 		}
 		if strings.HasPrefix(q, "/pane ") {
-			fmt.Println("Use tmux focus (or click the pane) to switch active panes.")
+			n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(q, "/pane ")))
+			if err != nil || n < 1 || n > 3 {
+				fmt.Println("pane: pane number must be 1..3")
+				continue
+			}
+			if err := a.focusPane(n); err != nil {
+				fmt.Println("pane:", err)
+			}
 			continue
 		}
 		plan := a.Compiler.Plan(ctx, q, false)
@@ -178,6 +185,30 @@ func (a *App) split(roomID string, n int) error {
 	_ = exec.Command("tmux", "select-layout", "tiled").Run()
 	r.PaneCount = n
 	return a.Store.SaveRoom(r)
+}
+
+func (a *App) focusPane(logicalPane int) error {
+	if os.Getenv("TMUX") == "" {
+		return fmt.Errorf("tmux is required for pane focus")
+	}
+
+	out, err := exec.Command("tmux", "list-panes", "-F", "#{pane_id}\t#{pane_start_command}").Output()
+	if err != nil {
+		return err
+	}
+
+	marker := "--pane " + strconv.Itoa(logicalPane)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if strings.Contains(parts[1], marker) || strings.Contains(parts[1], "--pane' '"+strconv.Itoa(logicalPane)) {
+			return exec.Command("tmux", "select-pane", "-t", parts[0]).Run()
+		}
+	}
+
+	return fmt.Errorf("pane %d is not open", logicalPane)
 }
 
 func (a *App) maybeCompress(ctx context.Context, roomID string, pane int) {
